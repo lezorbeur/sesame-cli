@@ -80,7 +80,7 @@ def run_setup(packages, ext_modules):
 config = configparser.ConfigParser()
 try:
     with open(CONFIG_FILE) as f:
-        config.readfp(f)
+        config.read_file(f)
 except IOError:
     print("Could not open config file.")
 
