@@ -1,0 +1,38 @@
+{
+  "nx": 150,
+  "length": 3e-4,
+  "materials": [
+    {
+      "Nc": 8e17,
+      "Nv": 1.8e19,
+      "Eg": 1.5,
+      "affinity": 3.9,
+      "epsilon": 9.4,
+      "mu_e": 100,
+      "mu_h": 100,
+      "tau_e": 1e-9,
+      "tau_h": 1e-9,
+      "Et": 0,
+      "B": 0,
+      "Cn": 0,
+      "Cp": 0,
+      "mass_e": 1,
+      "mass_h": 1
+    }
+  ],
+  "donors": [
+    {"density": 1e17}
+  ],
+  "acceptors": [
+    {"density": 1e15}
+  ],
+  "contacts": {
+    "left": "Ohmic",
+    "right": "Ohmic"
+  },
+  "generation": {
+    "type": "exponential",
+    "phi": 1e17,
+    "alpha": 2.3e4
+  }
+}

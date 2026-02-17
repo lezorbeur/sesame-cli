@@ -1,0 +1,16 @@
+[
+  {
+    "location": 1e-5,
+    "Density": 1e12,
+    "sigma_e": 1e-14,
+    "sigma_h": 1e-14,
+    "Energy": 0.5
+  },
+  {
+    "location": 1.5e-5,
+    "Density": 5e11,
+    "sigma_e": 2e-14,
+    "sigma_h": 2e-14,
+    "Energy": 0.7
+  }
+]

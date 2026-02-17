@@ -6,9 +6,13 @@
 # LICENSE.rst found in the top-level directory of this distribution.
  
 import sys
+import os
 import configparser
 from setuptools import setup, Extension
 from distutils.command.build_ext import build_ext
+
+# Add project root to path temporarily to avoid import issues
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from distutils.errors import DistutilsPlatformError, DistutilsExecError, CCompilerError
 
 
@@ -68,8 +72,14 @@ def run_setup(packages, ext_modules):
         author = 'Benoit H. Gaury',
         author_email = 'benoitgaury@gmail.com',
         packages = packages,
+        py_modules = ['sesame_cli_main'],
         cmdclass = cmdclass,
         ext_modules = ext_modules,
+        entry_points={
+            'console_scripts': [
+                'sesame-cli=sesame_cli_main:main'
+            ]
+        }, 
         classifiers = [
             'Intended Audience :: Science/Research',
             'Programming Language :: Python :: 3',
@@ -85,6 +95,8 @@ except IOError:
     print("Could not open config file.")
 
 packages = ['sesame']
+if os.path.isdir('cmd'):
+    packages.append('cmd')
 if config.getboolean('GUI', 'use'):
     packages.append('sesame.ui')
 if 'mumps' in config.sections():
