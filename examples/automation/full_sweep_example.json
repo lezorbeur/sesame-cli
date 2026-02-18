@@ -1,0 +1,34 @@
+{
+  "base_config": {
+    "nx": 120,
+    "length": 5e-4,
+    "materials": [
+      {
+        "Nc": 2.86e19,
+        "Nv": 3.1e19,
+        "Eg": 1.12,
+        "affinity": 4.05,
+        "epsilon": 11.7,
+        "mu_e": 1350,
+        "mu_h": 480,
+        "tau_e": 1e-7,
+        "tau_h": 1e-7
+      }
+    ],
+    "donors": [{"density": 1e17}],
+    "acceptors": [{"density": 1e15}],
+    "generation": {"type": "exponential", "phi": 1e17, "alpha": 2.3e4}
+  },
+  "sweep": [
+    {
+      "parameter": "materials.0.mu_e",
+      "values": [500, 1000, 1500]
+    },
+    {
+      "parameter": "length",
+      "range": {"start": 1e-4, "stop": 1e-3, "num": 3}
+    }
+  ],
+  "voltage_loop": [0.0, 0.4, 0.7],
+  "out_dir": "mobility_length_sweep"
+}

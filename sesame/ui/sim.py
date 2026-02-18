@@ -10,7 +10,7 @@ import logging
 
 import sesame
 from ..solvers import Solver
-from .. utils import save_sim
+from .. utils import save_sim, safe_eval, make_safe_callable
 from scipy.io import savemat
 
 logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
@@ -95,9 +95,9 @@ class SimulationWorker(QObject):
             if generation != "" and self.use_manual_g is True:
                 # create callable 
                 if system.dimension == 1:
-                    f = eval('lambda x:' + generation)
+                    f = make_safe_callable(generation, ('x',))
                 elif system.dimension == 2:
-                    f = eval('lambda x, y:' + generation)
+                    f = make_safe_callable(generation, ('x', 'y'))
                 # update generation rate of the system
                 try:
                     system.generation(f)
@@ -192,9 +192,9 @@ class SimulationWorker(QObject):
                 self.logger.info("Parameter value: {0} = {1}".format(paramName, p))
                 # create callable 
                 if system.dimension == 1:
-                    f = eval('lambda x, {0}:'.format(paramName) + generation)
+                    f = make_safe_callable(generation, ('x', paramName))
                 elif system.dimension == 2:
-                    f = eval('lambda x, y, {0}:'.format(paramName) + generation)
+                    f = make_safe_callable(generation, ('x', 'y', paramName))
                 # update generation rate of the system
                 try:
                     system.generation(f, args=(p,))

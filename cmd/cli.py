@@ -11,7 +11,7 @@ import logging
 import os
 
 import sesame
-from sesame.utils import save_sim, load_sim
+from sesame.utils import save_sim, load_sim, safe_eval, make_safe_callable
 from sesame.analyzer import Analyzer
 from configparser import ConfigParser
 from ast import literal_eval as ev
@@ -145,8 +145,15 @@ def cmd_ivcurve(args):
 
     # Convert to physical units and save summary
     j_phys = j * sys.scaling.current
-    np.savez(args.out + "_IV_summary.npz", v=V, j=j_phys)
-    print("Saved IV summary to {}".format(args.out + "_IV_summary.npz"))
+    summary_name = args.out + "_IV_summary.npz"
+    np.savez(summary_name, v=V, j=j_phys)
+    print("Saved IV summary to {}".format(summary_name))
+
+    if args.json_out:
+        j_list = [x if np.isfinite(x) else None for x in j_phys.tolist()]
+        with open(args.json_out, 'w') as f:
+            json.dump({'v': V.tolist(), 'j': j_list, 'units': {'v': 'V', 'j': 'A/cm^2'}}, f, indent=2)
+        print("Saved JSON summary to {}".format(args.json_out))
     return 0
 
 
@@ -404,7 +411,18 @@ def cmd_run_config(args):
 
         # build settings dict for parseSettings
         settings = {}
-        settings['grid'] = ev(grid)
+        # parseSettings expects grid to be a list of strings
+        try:
+            g_val = ev(grid)
+            if isinstance(g_val, list) and not isinstance(g_val[0], list) and not isinstance(g_val[0], tuple):
+                # 1D grid like [0, 3e-4, 150]
+                settings['grid'] = [grid]
+            else:
+                # 2D grid or already a list of strings
+                settings['grid'] = [grid] if isinstance(grid, str) else grid
+        except:
+            settings['grid'] = [grid]
+
         settings['materials'] = ev(materials)
         settings['defects'] = ev(defects)
         settings['gen'] = gen
@@ -496,9 +514,9 @@ def cmd_run_config(args):
             else:
                 generation = gen_expr
             if system.dimension == 1:
-                f = eval('lambda x:' + generation)
+                f = make_safe_callable(generation, ('x',))
             else:
-                f = eval('lambda x,y:' + generation)
+                f = make_safe_callable(generation, ('x', 'y'))
             system.generation(f)
 
         # loop
@@ -518,8 +536,45 @@ def cmd_run_config(args):
             save_sim(system, solution, name)
             print('Saved', name)
 
+    elif loopValues:
+        # Generation loop
+        try:
+            loop_vals = ev(loopValues)
+            if isinstance(loop_vals, str):
+                loop_vals = [float(x) for x in loop_vals.split(',') if x.strip()]
+        except Exception:
+            loop_vals = [float(x) for x in loopValues.split(',') if x.strip()]
+
+        logging.info('Generation rate loop starting now')
+        gen_expr = settings.get('gen')
+        if isinstance(gen_expr, tuple):
+            generation = gen_expr[0]
+        else:
+            generation = gen_expr
+        paramName = cfg.get('System', 'Generation parameter')
+
+        for idx, p in enumerate(loop_vals):
+            logging.info('Parameter value: %s = %s', paramName, p)
+            if system.dimension == 1:
+                f = make_safe_callable(generation, ('x', paramName))
+            else:
+                f = make_safe_callable(generation, ('x', 'y', paramName))
+            system.generation(f, args=(p,))
+
+            system.g /= 10**ramp
+            for a in range(ramp+1):
+                logging.info('Amplitude divided by %s', 10**(ramp-a))
+                solution = solver.solve(system, 'all', solution, precision, BCs, maxSteps, True, htpy)
+                system.g *= 10
+                if solution is None:
+                    logging.error('Solver failed at value %s', p)
+                    return 1
+            # save result
+            name = os.path.join(args.out_dir, f"{fileName}_{idx}.gzip")
+            save_sim(system, solution, name)
+            print('Saved', name)
     else:
-        logging.info('Generation loop not implemented in CLI run-config')
+        logging.info('No loop to run in CLI run-config')
 
     return 0
 
@@ -610,12 +665,13 @@ def cmd_simulate(args):
         # generation
         try:
             if args.use_manual_g and args.gen_expr:
-                expr = args.gen_expr
-                if sys.dimension == 1:
-                    gen_f = eval('lambda x:' + expr, {'np': np})
-                else:
-                    gen_f = eval('lambda x,y:' + expr, {'np': np})
-                sys.generation(gen_f)
+                if not args.generation_loop:
+                    expr = args.gen_expr
+                    if sys.dimension == 1:
+                        gen_f = make_safe_callable(expr, ('x',))
+                    else:
+                        gen_f = make_safe_callable(expr, ('x', 'y'))
+                    sys.generation(gen_f)
             elif args.monochromatic and args.wavelength and args.power:
                 phi = float(args.power)
                 alpha = 2.3e4
@@ -656,7 +712,7 @@ def cmd_simulate(args):
             if solver.equilibrium is None:
                 # try with larger homotopy steps and small perturbed guesses
                 tried = False
-                for htry in (max(2, args.htpy), 5, 10):
+                for htry in (max(2, args.htpy), 5, 10, 20):
                     logging.info('Retry equilibrium with homotopy htp=%s', htry)
                     solver.solve(sys, 'Poisson', guess, args.tol, args.periodic, args.maxiter, True, htry)
                     if solver.equilibrium is not None:
@@ -722,13 +778,83 @@ def cmd_simulate(args):
                 nx = sys.nx
                 s = [nx-1 + j*nx for j in range(sys.ny)]
                 q = 1 if sys.rho[nx-1] < 0 else -1
+                j_vals = []
                 for idx, val in enumerate(loop_vals):
                     vapp = float(val) / sys.scaling.energy
+                    # keep a copy of previous solution in case of failure
+                    prev_solution = {k: np.copy(v) for k, v in solution.items()}
+
                     solution['v'][s] = solver.equilibrium[s] + q*vapp
                     solution = solver.solve(sys, 'all', solution, args.tol, args.periodic, args.maxiter, True, args.htpy)
+
+                    if solution is None:
+                        logging.info('Retrying voltage %s with increased homotopy', val)
+                        # try with a smaller initial step by using more homotopy
+                        solution = solver.solve(sys, 'all', prev_solution, args.tol, args.periodic, args.maxiter, True, max(args.htpy*2, 5))
+
                     if solution is None:
                         logging.error('Solver failed at value %s', val)
                         return 15
+
+                    # compute current
+                    try:
+                        az = Analyzer(sys, solution)
+                        j_vals.append(float(az.full_current() * sys.scaling.current))
+                    except Exception:
+                        j_vals.append(float('nan'))
+
+                    name = os.path.join(args.out_dir, f"{args.file_name}_{idx}.gzip")
+                    try:
+                        save_sim(sys, solution, name)
+                        print('Saved', name)
+                    except Exception as e:
+                        logging.error('Could not save result %s: %s', name, e)
+                        logging.debug(traceback.format_exc())
+                        return 16
+
+                # save summary
+                summary_path = os.path.join(args.out_dir, args.file_name + "_IV_summary.npz")
+                np.savez(summary_path, v=loop_vals, j=np.array(j_vals))
+                print("Saved IV summary to", summary_path)
+
+                if args.json_out:
+                    json_path = os.path.join(args.out_dir, args.json_out)
+                    j_list = [x if np.isfinite(x) else None for x in j_vals]
+                    with open(json_path, 'w') as f:
+                        json.dump({'v': loop_vals.tolist(), 'j': j_list, 'units': {'v': 'V', 'j': 'A/cm^2'}}, f, indent=2)
+                    print("Saved JSON summary to", json_path)
+
+            except Exception as e:
+                logging.error('Error during voltage loop: %s', e)
+                logging.debug(traceback.format_exc())
+                return 17
+        else:
+            # Generation loop
+            try:
+                for idx, val in enumerate(loop_vals):
+                    p = float(val)
+                    logging.info('Parameter value: %s = %s', args.gen_param, p)
+                    if sys.dimension == 1:
+                        gen_f = make_safe_callable(args.gen_expr, ('x', args.gen_param))
+                    else:
+                        gen_f = make_safe_callable(args.gen_expr, ('x', 'y', args.gen_param))
+                    sys.generation(gen_f, args=(p,))
+
+                    sys.g /= 10**args.ramp
+                    for a in range(args.ramp + 1):
+                        logging.info('Amplitude divided by %s', 10**(args.ramp-a))
+                        prev_solution = {k: np.copy(v) for k, v in solution.items()}
+                        solution = solver.solve(sys, 'all', solution, args.tol, args.periodic, args.maxiter, True, args.htpy)
+
+                        if solution is None:
+                            logging.info('Retrying generation ramp with increased homotopy')
+                            solution = solver.solve(sys, 'all', prev_solution, args.tol, args.periodic, args.maxiter, True, max(args.htpy*2, 5))
+
+                        sys.g *= 10
+                        if solution is None:
+                            logging.error('Solver failed at value %s', p)
+                            return 15
+
                     name = os.path.join(args.out_dir, f"{args.file_name}_{idx}.gzip")
                     try:
                         save_sim(sys, solution, name)
@@ -738,11 +864,9 @@ def cmd_simulate(args):
                         logging.debug(traceback.format_exc())
                         return 16
             except Exception as e:
-                logging.error('Error during voltage loop: %s', e)
+                logging.error('Error during generation loop: %s', e)
                 logging.debug(traceback.format_exc())
-                return 17
-        else:
-            logging.info('Generation-loop simulation not fully implemented via simulate')
+                return 18
 
         return 0
     except Exception as e:
@@ -764,6 +888,7 @@ def build_parser():
     iv.add_argument('--vmax', type=float, default=0.95)
     iv.add_argument('--npoints', type=int, default=10)
     iv.add_argument('--out', default='iv_out', help='Output prefix for saved files')
+    iv.add_argument('--json-out', help='Output JSON filename for IV summary')
     iv.set_defaults(func=cmd_ivcurve)
 
     # build
@@ -878,6 +1003,7 @@ def build_parser():
     sim.add_argument('--defects-file', help='JSON file with list of defects')
     sim.add_argument('--use-manual-g', action='store_true', help='Provide manual generation expression')
     sim.add_argument('--gen-expr', help='Generation expression, e.g. "phi*alpha*np.exp(-alpha*x)"')
+    sim.add_argument('--gen-param', default='phi', help='Parameter name for custom generation loop')
     sim.add_argument('--onesun', action='store_true')
     sim.add_argument('--monochromatic', action='store_true')
     sim.add_argument('--wavelength', type=float)
@@ -905,6 +1031,7 @@ def build_parser():
     sim.add_argument('--iter-prec', type=float, default=1e-6)
     sim.add_argument('--htpy', type=int, default=1)
     sim.add_argument('--out-dir', default='.', help='Directory to write outputs')
+    sim.add_argument('--json-out', help='Output JSON filename for IV summary (saved in out-dir)')
     sim.set_defaults(func=cmd_simulate)
 
     return p

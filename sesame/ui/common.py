@@ -4,7 +4,7 @@
 # LICENSE.rst found in the top-level directory of this distribution.
 
 from .. import Builder
-from .. utils import isfloat
+from .. utils import isfloat, safe_eval, make_safe_callable
 from ast import literal_eval as ev
 from scipy.interpolate import interp1d
 import numpy as np
@@ -75,7 +75,7 @@ def parseLocation(location, dimension):
             location = location.replace("x", "pos[0]")
             location = location.replace("y", "pos[1]")
         # 2. define function
-        function = lambda pos: eval(location)
+        function = lambda pos: safe_eval(location, {'pos': pos})
     return function
 
 

@@ -154,14 +154,16 @@ class Solver():
                 logging.info("Solving for the equilibrium electrostatic potential")
 
             if guess is None:
-                guess = self.make_guess(system)
+                _guess = self.make_guess(system)
             else:
                 # testing of the data type of guess.
                 if type(guess) is dict:
-                    guess = guess['v']
+                    _guess = guess['v']
+                else:
+                    _guess = guess
 
             # Compute the potential (Newton returns an array)
-            self.equilibrium = self._newton(system, guess, tol=tol,\
+            self.equilibrium = self._newton(system, _guess, tol=tol,\
                               periodic_bcs=periodic_bcs,\
                               maxiter=maxiter, verbose=verbose, htp=htp)
 
