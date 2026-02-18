@@ -82,21 +82,43 @@ col1, col2 = st.columns([1, 1])
 with col1:
     st.header("⚙️ Configuration")
 
+    # Slot Filling Detection
+    is_incomplete = False
+    if not st.session_state.request.system.materials:
+        is_incomplete = True
+        st.error("⚠️ Donnée manquante : MATÉRIAU")
+
+    # Validation / Slot Filling Form
+    with st.expander("🛠️ Slot Filling & Manual Override", expanded=is_incomplete):
+        # Material Selection
+        mat_options = ["None", "Si", "GaAs", "CdTe"]
+        current_mat_name = st.session_state.request.system.materials[0].name if st.session_state.request.system.materials else "None"
+        mat_idx = mat_options.index(current_mat_name) if current_mat_name in mat_options else 0
+        new_mat = st.selectbox("Select Material", options=mat_options, index=mat_idx)
+
+        if new_mat != "None" and (not st.session_state.request.system.materials or st.session_state.request.system.materials[0].name != new_mat):
+             mat_props = st.session_state.material_cache.get(new_mat) or MaterialEnricher().fetch_properties(new_mat)
+             st.session_state.request.system.materials = [mat_props]
+             st.rerun()
+
+        # Doping Form
+        st.subheader("Doping")
+        if not st.session_state.request.system.doping:
+            if st.button("Add PN Junction Doping"):
+                st.session_state.request.system.doping = [
+                    DopingConfig(type="donor", density=1e17, location="x < 0.5 * length"),
+                    DopingConfig(type="acceptor", density=1e15, location="x >= 0.5 * length")
+                ]
+                st.rerun()
+        else:
+             for i, d in enumerate(st.session_state.request.system.doping):
+                 d.density = st.number_input(f"Doping {i+1} Density", value=float(d.density), format="%.2e")
+                 d.location = st.text_input(f"Doping {i+1} Location", value=d.location)
+
     with st.expander("System Dimensions", expanded=True):
         st.session_state.request.system.nx = st.number_input("nx (grid points)", value=st.session_state.request.system.nx)
         st.session_state.request.system.length = st.number_input("Length [cm]", value=st.session_state.request.system.length, format="%.2e")
-
-    with st.expander("Materials"):
-        if not st.session_state.request.system.materials:
-            st.warning("No material defined. Use the assistant or add one manually.")
-            if st.button("Add Default Si"):
-                st.session_state.request.system.materials = [MaterialEnricher().fetch_properties("Si")]
-                st.rerun()
-        else:
-            for i, mat in enumerate(st.session_state.request.system.materials):
-                st.subheader(f"Material {i+1}: {mat.name or 'Unknown'}")
-                # Simple display/edit for brevity
-                mat.Eg = st.number_input(f"Bandgap (Mat {i+1})", value=mat.Eg)
+        st.session_state.request.system.T = st.number_input("Temperature [K]", value=st.session_state.request.system.T)
 
     with st.expander("Simulation Parameters"):
         st.session_state.request.simulation.voltages = [

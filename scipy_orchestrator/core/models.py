@@ -3,13 +3,13 @@ from typing import List, Optional, Union, Dict, Literal
 
 class MaterialProperties(BaseModel):
     name: Optional[str] = None
-    Nc: float = Field(..., description="Effective DOS conduction band [cm^-3]")
-    Nv: float = Field(..., description="Effective DOS valence band [cm^-3]")
-    Eg: float = Field(..., description="Band gap [eV]")
-    affinity: float = Field(..., description="Electron affinity [eV]")
-    epsilon: float = Field(..., description="Relative permittivity")
-    mu_e: float = Field(..., description="Electron mobility [cm^2/V/s]")
-    mu_h: float = Field(..., description="Hole mobility [cm^2/V/s]")
+    Nc: float = Field(..., gt=0, lt=1e22, description="Effective DOS conduction band [cm^-3]")
+    Nv: float = Field(..., gt=0, lt=1e22, description="Effective DOS valence band [cm^-3]")
+    Eg: float = Field(..., gt=0, lt=10, description="Band gap [eV]")
+    affinity: float = Field(..., ge=0, lt=10, description="Electron affinity [eV]")
+    epsilon: float = Field(..., gt=0, lt=100, description="Relative permittivity")
+    mu_e: float = Field(..., gt=0, lt=100000, description="Electron mobility [cm^2/V/s]")
+    mu_h: float = Field(..., gt=0, lt=100000, description="Hole mobility [cm^2/V/s]")
     tau_e: float = Field(default=1e-9, description="Electron lifetime [s]")
     tau_h: float = Field(default=1e-9, description="Hole lifetime [s]")
     Et: float = Field(default=0, description="Trap energy level relative to intrinsic [eV]")
@@ -17,7 +17,7 @@ class MaterialProperties(BaseModel):
 
 class DopingConfig(BaseModel):
     type: Literal["donor", "acceptor"]
-    density: float = Field(..., gt=0, description="Doping density [cm^-3]")
+    density: float = Field(..., gt=0, lt=1e21, description="Doping density [cm^-3]")
     location: Optional[str] = Field(default="", description="Spatial condition for doping")
 
 class DefectConfig(BaseModel):
@@ -41,11 +41,12 @@ class GenerationConfig(BaseModel):
     expr: Optional[str] = None
 
 class SystemConfig(BaseModel):
-    nx: int = Field(default=150, ge=10)
-    ny: int = Field(default=1, ge=1)
-    length: float = Field(default=3e-4, gt=0, description="Length [cm]")
-    width: Optional[float] = Field(default=1e-4, description="Width [cm] for 2D")
+    nx: int = Field(default=150, ge=10, le=1000)
+    ny: int = Field(default=1, ge=1, le=1000)
+    length: float = Field(default=3e-4, gt=0, lt=1.0, description="Length [cm]")
+    width: Optional[float] = Field(default=1e-4, gt=0, lt=1.0, description="Width [cm] for 2D")
     periodic: bool = True
+    T: float = Field(default=300.0, gt=0, lt=1000, description="Temperature [K]")
     materials: List[MaterialProperties]
     doping: List[DopingConfig] = []
     defects: List[DefectConfig] = []

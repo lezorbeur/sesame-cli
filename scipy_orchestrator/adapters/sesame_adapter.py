@@ -4,18 +4,36 @@ from sesame.utils import make_safe_callable
 import numpy as np
 
 class SesameAdapter:
+    """
+    Adapter class for Sesame 2.0 simulation engine.
+
+    Translates engine-agnostic FullSimulationRequest objects into
+    Sesame-specific API calls.
+    """
     def __init__(self, request: FullSimulationRequest):
+        """
+        Initializes the adapter with a simulation request.
+
+        Args:
+            request (FullSimulationRequest): The validated simulation parameters.
+        """
         self.request = request
         self.api = SesameAPI(use_mumps=request.simulation.use_mumps)
 
     def _prepare_sesame_config(self) -> dict:
-        """Translate FullSimulationRequest to the dict expected by SesameAPI."""
+        """
+        Translate FullSimulationRequest to the dict expected by SesameAPI.
+
+        Returns:
+            dict: Configuration dictionary for Sesame Builder.
+        """
         s = self.request.system
 
         sesame_config = {
             'nx': s.nx,
             'length': s.length,
             'periodic': s.periodic,
+            'T': s.T,
             'materials': [],
             'donors': [],
             'acceptors': [],
@@ -78,7 +96,17 @@ class SesameAdapter:
         return sesame_config
 
     def run(self) -> dict:
-        """Execute the simulation and return results summary."""
+        """
+        Execute the simulation and return results summary.
+
+        This method performs the following steps:
+        1. Build the physical system.
+        2. Solve for thermal equilibrium.
+        3. Sweep through the requested bias voltages.
+
+        Returns:
+            dict: A summary of simulation results (J-V points, status).
+        """
         cfg = self._prepare_sesame_config()
         self.api.build_system(cfg)
 
