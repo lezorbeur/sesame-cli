@@ -2,11 +2,14 @@ from .celery_app import app
 from scipy_orchestrator.core.models import FullSimulationRequest
 from scipy_orchestrator.worker.executor import IsolatedExecutor
 from scipy_orchestrator.notifications.firebase_provider import FirebaseNotificationProvider
-from scipy_orchestrator.storage.database import SessionLocal, SimulationHistory
+from scipy_orchestrator.storage.database import SessionLocal, SimulationHistory, init_db
 from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Initialize database
+init_db()
 
 @app.task(bind=True)
 def run_simulation_task(self, request_dict: dict):

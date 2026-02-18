@@ -5,9 +5,12 @@ from scipy_orchestrator.intelligence.material_cache import LocalMaterialCache
 from scipy_orchestrator.core.models import FullSimulationRequest, MaterialProperties, SystemConfig, SimulationParams, DopingConfig
 from scipy_orchestrator.adapters.sesame_adapter import SesameAdapter
 from scipy_orchestrator.core.preview_mesh import generate_mesh_preview
-from scipy_orchestrator.storage.database import SessionLocal, SimulationHistory
+from scipy_orchestrator.storage.database import SessionLocal, SimulationHistory, init_db
 import json
 from datetime import datetime
+
+# Initialize database on startup
+init_db()
 
 st.set_page_config(page_title="SCIPY-ORCHESTRATOR", layout="wide")
 

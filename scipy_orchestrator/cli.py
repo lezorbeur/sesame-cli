@@ -6,11 +6,15 @@ from scipy_orchestrator.intelligence.layer import IntentExtractor, MaterialEnric
 from scipy_orchestrator.intelligence.material_cache import LocalMaterialCache
 from scipy_orchestrator.core.models import FullSimulationRequest, MaterialProperties, SystemConfig, SimulationParams
 from scipy_orchestrator.adapters.sesame_adapter import SesameAdapter
+from scipy_orchestrator.storage.database import init_db
 from rich.console import Console
 from rich.table import Table
 
 app = typer.Typer(help="SCIPY-ORCHESTRATOR CLI")
 console = Console()
+
+# Initialize database
+init_db()
 
 @app.command()
 def extract(text: str):

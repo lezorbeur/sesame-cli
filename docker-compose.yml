@@ -24,6 +24,11 @@ services:
   worker:
     build: .
     command: celery -A scipy_orchestrator.orchestration.celery_app worker --loglevel=info
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
     environment:
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=sqlite:///./data/orchestrator.db
