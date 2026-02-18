@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from typing import Optional
 from scipy_orchestrator.intelligence.layer import IntentExtractor, MaterialEnricher
+from scipy_orchestrator.intelligence.material_cache import LocalMaterialCache
 from scipy_orchestrator.core.models import FullSimulationRequest, MaterialProperties, SystemConfig, SimulationParams
 from scipy_orchestrator.adapters.sesame_adapter import SesameAdapter
 from rich.console import Console
@@ -50,8 +51,15 @@ def run(config_file: Path):
 @app.command()
 def quick_sim(material: str, thickness_nm: float = 200, voltage: float = 0.5):
     """Run a quick simulation for a given material and thickness."""
-    enricher = MaterialEnricher()
-    mat_props = enricher.fetch_properties(material)
+    cache = LocalMaterialCache()
+    mat_props = cache.get(material)
+
+    if not mat_props:
+        console.print(f"[yellow]Material {material} not in cache. Fetching...[/yellow]")
+        enricher = MaterialEnricher()
+        mat_props = enricher.fetch_properties(material)
+        if mat_props:
+            cache.set(material, mat_props)
 
     if not mat_props:
         console.print(f"[red]Material {material} not found in database.[/red]")

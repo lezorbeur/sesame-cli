@@ -1,9 +1,13 @@
 import streamlit as st
 import plotly.graph_objects as go
 from scipy_orchestrator.intelligence.layer import IntentExtractor, MaterialEnricher
+from scipy_orchestrator.intelligence.material_cache import LocalMaterialCache
 from scipy_orchestrator.core.models import FullSimulationRequest, MaterialProperties, SystemConfig, SimulationParams, DopingConfig
 from scipy_orchestrator.adapters.sesame_adapter import SesameAdapter
+from scipy_orchestrator.core.preview_mesh import generate_mesh_preview
+from scipy_orchestrator.storage.database import SessionLocal, SimulationHistory
 import json
+from datetime import datetime
 
 st.set_page_config(page_title="SCIPY-ORCHESTRATOR", layout="wide")
 
@@ -18,6 +22,9 @@ if "request" not in st.session_state:
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+if "material_cache" not in st.session_state:
+    st.session_state.material_cache = LocalMaterialCache()
 
 def generate_form_from_pydantic(model_instance, prefix=""):
     """Recursively generate Streamlit inputs from a Pydantic model instance."""
@@ -48,11 +55,18 @@ with st.sidebar:
         extracted = extractor.extract(prompt)
 
         if "material" in extracted:
-            enricher = MaterialEnricher()
-            mat_props = enricher.fetch_properties(extracted["material"])
+            mat_name = extracted["material"]
+            # Check cache first
+            mat_props = st.session_state.material_cache.get(mat_name)
+            if not mat_props:
+                enricher = MaterialEnricher()
+                mat_props = enricher.fetch_properties(mat_name)
+                if mat_props:
+                    st.session_state.material_cache.set(mat_name, mat_props)
+
             if mat_props:
                 st.session_state.request.system.materials = [mat_props]
-                st.info(f"Loaded properties for {extracted['material']} from Materials Project.")
+                st.info(f"Loaded properties for {mat_name} (Cached).")
 
         if "thickness" in extracted:
             st.session_state.request.system.length = extracted["thickness"]
@@ -89,18 +103,70 @@ with col1:
             st.number_input("Target Voltage [V]", value=st.session_state.request.simulation.voltages[0])
         ]
 
+    st.header("📜 History")
+    db = SessionLocal()
+    history = db.query(SimulationHistory).order_by(SimulationHistory.created_at.desc()).limit(5).all()
+    for entry in history:
+        st.text(f"{entry.created_at.strftime('%H:%M:%S')} - {entry.material_name} - {entry.status}")
+    db.close()
+
 with col2:
     st.header("🚀 Execution")
 
     # Pre-flight check
     st.subheader("Pre-flight Check")
+
+    if st.session_state.request.system.materials:
+        # Mesh Preview
+        preview = generate_mesh_preview(st.session_state.request.system)
+        fig_mesh = go.Figure()
+        if preview["dimension"] == 1:
+            fig_mesh.add_trace(go.Scatter(x=preview["x"], y=[0]*len(preview["x"]), mode='markers', name='Nodes'))
+            fig_mesh.update_layout(title="Mesh Preview (1D Nodes)", xaxis_title="x [cm]", yaxis_showgrid=False, yaxis_zeroline=False, yaxis_showticklabels=False)
+        else:
+            # 2D Grid
+            xx, yy = np.meshgrid(preview["x"], preview["y"])
+            fig_mesh.add_trace(go.Scatter(x=xx.flatten(), y=yy.flatten(), mode='markers', marker=dict(size=3), name='Nodes'))
+            fig_mesh.update_layout(title="Mesh Preview (2D Nodes)", xaxis_title="x [cm]", yaxis_title="y [cm]")
+
+        st.plotly_chart(fig_mesh, use_container_width=True)
+        st.info(f"Grid: {len(preview['x'])} x {len(preview['y'])} = {preview['nodes_count']} nodes.")
+
     st.json(st.session_state.request.model_dump())
 
     if st.button("Run Simulation", type="primary"):
         with st.spinner("Executing simulation..."):
-            adapter = SesameAdapter(st.session_state.request)
-            results = adapter.run()
-            st.session_state.results = results
+            # Persistence
+            db = SessionLocal()
+            mat_name = st.session_state.request.system.materials[0].name if st.session_state.request.system.materials else "Unknown"
+            history_entry = SimulationHistory(
+                task_id=f"sync_{int(datetime.utcnow().timestamp())}",
+                status='running',
+                material_name=mat_name,
+                thickness_cm=st.session_state.request.system.length,
+                config_json=st.session_state.request.model_dump()
+            )
+            db.add(history_entry)
+            db.commit()
+
+            try:
+                adapter = SesameAdapter(st.session_state.request)
+                results = adapter.run()
+                st.session_state.results = results
+
+                if results['status'] == 'success':
+                    history_entry.status = 'completed'
+                    history_entry.summary_json = results
+                else:
+                    history_entry.status = 'failed'
+                history_entry.completed_at = datetime.utcnow()
+                db.commit()
+            except Exception as e:
+                history_entry.status = 'error'
+                db.commit()
+                st.error(f"Critical error: {e}")
+            finally:
+                db.close()
 
     if "results" in st.session_state:
         res = st.session_state.results
