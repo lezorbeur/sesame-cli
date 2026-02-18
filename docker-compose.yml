@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    command: streamlit run scipy_orchestrator/ui/app.py
+    ports:
+      - "8501:8501"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=.
+    depends_on:
+      - redis
+
+  worker:
+    build: .
+    command: celery -A scipy_orchestrator.orchestration.celery_app worker --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=.
+    depends_on:
+      - redis
