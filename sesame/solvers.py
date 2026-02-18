@@ -73,25 +73,36 @@ class Solver():
         # Make a linear assumption based on Dirichlet contacts
         nx = system.nx
         # determine what the potential on the left might be
-        if system.contacts_bcs[0] == 'Ohmic' or\
-           system.contacts_bcs[0] == 'Neutral':
-            if system.rho[0] < 0: # p-doped
+        if system.contacts_bcs[0] in ['Ohmic', 'Neutral', 'Neumann']:
+            rho0 = system.rho[0]
+            # avoid log(0) if doping is zero
+            if abs(rho0) < 1e-15:
+                rho0 = 1e-15
+
+            if rho0 < 0: # p-doped
                 v_left = -system.Eg[0]\
-                         - np.log(abs(system.rho[0])/system.Nv[0]) - system.bl[0]
+                         - np.log(abs(rho0)/system.Nv[0]) - system.bl[0]
             else: # n-doped
-                v_left = np.log(system.rho[0]/system.Nc[0]) - system.bl[0]
-        if system.contacts_bcs[0] == 'Schottky':
+                v_left = np.log(rho0/system.Nc[0]) - system.bl[0]
+        elif system.contacts_bcs[0] == 'Schottky':
             v_left = -system.contacts_WF[0] / system.scaling.energy
+        else:
+            v_left = 0
 
         # determine what the potential on the right might be
-        if system.contacts_bcs[1] == 'Ohmic' or\
-           system.contacts_bcs[1] == 'Neutral':
-            if system.rho[nx-1] < 0:
-                v_right = -system.Eg[nx-1] - np.log(abs(system.rho[nx-1])/system.Nv[nx-1]) - system.bl[nx-1]
+        if system.contacts_bcs[1] in ['Ohmic', 'Neutral', 'Neumann']:
+            rhoL = system.rho[nx-1]
+            if abs(rhoL) < 1e-15:
+                rhoL = 1e-15
+
+            if rhoL < 0:
+                v_right = -system.Eg[nx-1] - np.log(abs(rhoL)/system.Nv[nx-1]) - system.bl[nx-1]
             else:
-                v_right = np.log(system.rho[nx-1]/system.Nc[nx-1]) - system.bl[nx-1]
-        if system.contacts_bcs[1] == 'Schottky':
+                v_right = np.log(rhoL/system.Nc[nx-1]) - system.bl[nx-1]
+        elif system.contacts_bcs[1] == 'Schottky':
             v_right = -system.contacts_WF[1] / system.scaling.energy
+        else:
+            v_right = 0
 
 
         # Make a linear guess for the equilibrium potential

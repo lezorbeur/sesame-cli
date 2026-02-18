@@ -154,7 +154,7 @@ with col2:
             fig_mesh.add_trace(go.Scatter(x=xx.flatten(), y=yy.flatten(), mode='markers', marker=dict(size=3), name='Nodes'))
             fig_mesh.update_layout(title="Mesh Preview (2D Nodes)", xaxis_title="x [cm]", yaxis_title="y [cm]")
 
-        st.plotly_chart(fig_mesh, use_container_width=True)
+        st.plotly_chart(fig_mesh, width="stretch")
         st.info(f"Grid: {len(preview['x'])} x {len(preview['y'])} = {preview['nodes_count']} nodes.")
 
     st.json(st.session_state.request.model_dump())
@@ -206,7 +206,7 @@ with col2:
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=vs, y=js, mode='lines+markers', name='J-V Curve'))
             fig.update_layout(title="J-V Characteristic", xaxis_title="Voltage (V)", yaxis_title="Current (A/cm^2)")
-            st.plotly_chart(fig)
+            st.plotly_chart(fig, width="stretch")
 
             st.download_button("Download Results (JSON)", data=json.dumps(res), file_name="results.json")
         else:

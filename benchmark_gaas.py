@@ -1,45 +1,43 @@
 from scipy_orchestrator.core.models import MaterialProperties, SystemConfig, FullSimulationRequest, SimulationParams, DopingConfig
 from scipy_orchestrator.adapters.sesame_adapter import SesameAdapter
 from scipy_orchestrator.intelligence.layer import MaterialEnricher
+from sesame.api import SesameAPI
 import numpy as np
 import sesame
 
 def run_benchmark():
-    print("--- Benchmark de Concordance GaAs ---")
+    print("--- Benchmark de Concordance GaAs (0.5V) ---")
 
-    # 1. Manual Sesame Run
-    x = np.linspace(0, 2e-4, 150)
-    sys_manual = sesame.Builder(x)
-
-    # GaAs properties from our DB
     enricher = MaterialEnricher()
-    gaas = enricher.fetch_properties("GaAs").model_dump()
-    gaas.pop('name', None)
-    gaas.pop('location', None)
+    gaas_props = enricher.fetch_properties("GaAs")
 
-    sys_manual.add_material(gaas)
-    sys_manual.add_donor(1e17, lambda pos: pos < 0.4e-4)
-    sys_manual.add_acceptor(1e15, lambda pos: pos >= 0.4e-4)
-    sys_manual.contact_type('Ohmic', 'Ohmic')
-    sys_manual.contact_S(1e7, 1e7, 1e7, 1e7)
-
-    sol_manual = sesame.solve(sys_manual, compute='Poisson', verbose=False)
-    sol_manual = sesame.solve(sys_manual, guess=sol_manual, verbose=False)
-
-    az_manual = sesame.Analyzer(sys_manual, sol_manual)
-    j_manual = az_manual.full_current() * sys_manual.scaling.current
+    # 1. Manual API Run
+    api_manual = SesameAPI()
+    cfg_manual = {
+        'nx': 150,
+        'length': 2e-4,
+        'materials': [gaas_props.model_dump()],
+        'donors': [{'density': 1e17, 'location': lambda pos: pos < 0.4e-4}],
+        'acceptors': [{'density': 1e15, 'location': lambda pos: pos >= 0.4e-4}],
+        'contacts': {'left': 'Ohmic', 'right': 'Ohmic', 'surface_recomb': [1e7, 1e7, 1e7, 1e7]}
+    }
+    api_manual.build_system(cfg_manual)
+    api_manual.solve_equilibrium()
+    api_manual.solve_at_voltage(0.5)
+    j_manual = api_manual.get_metrics()['current']
 
     # 2. Orchestrator Adapter Run
     req = FullSimulationRequest(
         system=SystemConfig(
             length=2e-4,
-            materials=[enricher.fetch_properties("GaAs")],
+            materials=[gaas_props],
             doping=[
                 DopingConfig(type="donor", density=1e17, location="x < 0.4e-4"),
                 DopingConfig(type="acceptor", density=1e15, location="x >= 0.4e-4")
-            ]
+            ],
+            contacts={'left': 'Ohmic', 'right': 'Ohmic', 'surface_recomb': [1e7, 1e7, 1e7, 1e7]}
         ),
-        simulation=SimulationParams(voltages=[0.0])
+        simulation=SimulationParams(voltages=[0.5])
     )
 
     adapter = SesameAdapter(req)
