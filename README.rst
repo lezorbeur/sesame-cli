@@ -66,6 +66,14 @@ or by specifying the location where to install the package files with
 The tutorial examples can be found in the directory ``examples`` inside the root
 directory of the Sesame source distribution.
 
+Security note
+.............
+Sesame uses Python's ``pickle`` module to save and load simulation objects. Since pickling is not secure, you should only load simulation files from trusted sources.
+
+For automation, Sesame provides a comprehensive CLI (``sesame-cli``), a high-level Python API, and a multi-parameter sweep engine. See ``cmd/AUTOMATION_GUIDE.md`` for details on building automated simulation workflows.
+
+It is recommended to use the provided JSON and CSV export features for safe data exchange in automated workflows.
+
 Building the documentation
 +++++++++++++++++++++++++++
 
@@ -96,4 +104,3 @@ The documentation is produced in ``doc/build/html``. To build the PDF file::
     make all-pdf
 
 The resulting PDF is produced in ``doc/build/latex``.
-

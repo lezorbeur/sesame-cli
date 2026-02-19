@@ -220,6 +220,7 @@ sesame-cli ivcurve [OPTIONS] --out OUTPUT_PREFIX
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `--out` | str | - | **Required.** Output prefix (no extension) |
+| `--json-out` | str | - | Output JSON filename for IV summary |
 | `--mesh-file` | str | - | Load system from `.gzip` (if empty, use defaults) |
 | `--nx` | int | 150 | Grid points (only if no `--mesh-file`) |
 | `--length` | float | 3e-4 | Device length [cm] (only if no `--mesh-file`) |
@@ -251,6 +252,7 @@ sesame-cli ivcurve --npoints 10 --tol 1e-7 --maxiter 500 --out iv5
 
 **Output:**
 - `iv1_IV_summary.npz` — NumPy archive with `voltage` and `current` arrays
+- `iv1_IV_summary.json` — (Optional) JSON summary if `--json-out` is used
 - `iv1_0.gzip`, `iv1_1.gzip`, ... — Full solution at each voltage
 
 **Loading results in Python:**
@@ -704,6 +706,8 @@ sesame-cli simulate [OPTIONS] --out-dir OUTPUT_DIR
 | Option | Type | Description |
 |--------|------|-------------|
 | `--out-dir` | str | **Required.** Output directory |
+| `--json-out` | str | - | Output JSON summary filename (saved in out-dir) |
+| `--gen-param` | str | `phi` | Parameter name for custom generation loop |
 
 **Examples:**
 
@@ -1378,6 +1382,20 @@ wait
 ```
 
 Submit with: `sbatch job.sh`
+
+---
+
+## Security Considerations
+
+### 1. Insecure Deserialization (Pickle)
+
+Sesame uses Python's `pickle` module to save and load simulation objects (in `.gzip` files). **The pickle module is not secure.** Only load simulation files from sources you trust, as malicious files can execute arbitrary code during loading.
+
+For automated workflows, it is recommended to use the `--json-out` flag to export numerical results, which can be safely parsed by other tools.
+
+### 2. Mathematical Expressions
+
+When providing custom generation expressions or locations via the CLI or configuration files, Sesame uses a restricted evaluation environment for safety. However, you should still ensure that input expressions come from trusted sources.
 
 ---
 

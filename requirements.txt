@@ -1,3 +1,17 @@
 numpy
 scipy
 matplotlib
+pydantic>=2.0
+langchain
+langchain-openai
+langchain-community
+streamlit
+plotly
+celery
+redis
+typer
+rich
+sqlalchemy
+firebase-admin
+requests
+PyQt5

@@ -8,6 +8,50 @@ import gzip
 import pickle
 from scipy.io import savemat
 
+def safe_eval(expr, allowed_vars=None):
+    """
+    Safely evaluate a mathematical expression using a restricted environment.
+    Only numpy and basic math functions are allowed.
+    """
+    allowed_names = {
+        'np': np,
+        'exp': np.exp,
+        'sin': np.sin,
+        'cos': np.cos,
+        'abs': np.abs,
+        'log': np.log,
+        'sqrt': np.sqrt,
+        'pi': np.pi,
+    }
+    if allowed_vars:
+        allowed_names.update(allowed_vars)
+
+    # Restrict __builtins__ to prevent access to dangerous functions
+    return eval(expr, {"__builtins__": {}}, allowed_names)
+
+def make_safe_callable(expr, var_names):
+    """
+    Returns a safe callable function from a string expression.
+    To be compatible with Sesame's Builder.generation, it must have the correct
+    number of positional arguments (1 for 1D, 2 for 2D).
+    """
+    if 'y' in var_names: # Assume 2D if 'y' is in var_names
+        def safe_f(x, y, *args):
+            allowed_vars = {'x': x, 'y': y}
+            # map remaining args to remaining var_names
+            other_names = [n for n in var_names if n not in ('x', 'y')]
+            for name, val in zip(other_names, args):
+                allowed_vars[name] = val
+            return safe_eval(expr, allowed_vars)
+    else:
+        def safe_f(x, *args):
+            allowed_vars = {'x': x}
+            other_names = [n for n in var_names if n != 'x']
+            for name, val in zip(other_names, args):
+                allowed_vars[name] = val
+            return safe_eval(expr, allowed_vars)
+    return safe_f
+
 def get_indices(sys, p, site=False):
     # Return the indices of continous coordinates on the discrete lattice
     # If site is True, return the site number instead
@@ -186,6 +230,9 @@ def save_sim(sys, result, filename, fmt='npy'):
     """
     Utility function that saves a system together with simulation results.
 
+    **Warning: For the default numpy format, this function uses pickle, which is
+    insecure. Only load files from trusted sources.**
+
     Parameters
     ----------
     sys: Builder
@@ -226,6 +273,9 @@ def load_sim(filename):
     """
     Utility function that loads a system together with simulation results.
 
+    **Warning: This function uses pickle, which is insecure. Only load
+    files from trusted sources.**
+
     Parameters
     ----------
     filename: string
@@ -246,6 +296,30 @@ def load_sim(filename):
     sys, result = pickle.loads(data)
     return sys, result
 
+
+def export_to_csv(sys, result, filename):
+    """
+    Export simulation results to a CSV file.
+    Includes x, y coordinates, potential, and quasi-Fermi levels.
+    """
+    import csv
+    nx, ny = sys.nx, sys.ny
+    xpts = sys.xpts
+    ypts = sys.ypts
+
+    v = result['v']
+    efn = result['efn']
+    efp = result['efp']
+
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['x [cm]', 'y [cm]', 'v [V_dimless]', 'efn [V_dimless]', 'efp [V_dimless]'])
+
+        for j in range(ny):
+            for i in range(nx):
+                idx = i + j*nx
+                y_val = ypts[j] if ny > 1 else 0
+                writer.writerow([xpts[i], y_val, v[idx], efn[idx], efp[idx]])
 
 def check_equal_sim_settings(system1, system2):
 

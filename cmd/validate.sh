@@ -15,7 +15,7 @@ echo "Working directory: $WORKDIR"
 echo ""
 
 # Ensure we can import the CLI
-export PYTHONPATH="/workspaces/sesame:$PYTHONPATH"
+export PYTHONPATH="/app:$PYTHONPATH"
 
 test_cmd() {
     local name="$1"
@@ -23,7 +23,7 @@ test_cmd() {
     echo -n "  Testing: $name ... "
     if python3 << PYEOF > /dev/null 2>&1
 import sys
-sys.path.insert(0, '/workspaces/sesame')
+sys.path.insert(0, '/app')
 from cmd.cli import main
 sys.exit(main($@) or 0)
 PYEOF
