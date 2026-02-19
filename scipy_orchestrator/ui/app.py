@@ -181,7 +181,9 @@ with col2:
 
                 if results['status'] == 'success':
                     history_entry.status = 'completed'
-                    history_entry.summary_json = results
+                    # Strip heavy profile data from DB summary for performance, keep in session state
+                    db_summary = {k: v for k, v in results.items() if k != 'profiles'}
+                    history_entry.summary_json = db_summary
                 else:
                     history_entry.status = 'failed'
                 history_entry.completed_at = datetime.utcnow()
@@ -198,15 +200,49 @@ with col2:
         if res["status"] == "success":
             st.success("Simulation Complete!")
 
-            # Plotting
-            iv = res["iv_curve"]
-            vs = [p["v"] for p in iv]
-            js = [p["j"] for p in iv]
+            tab1, tab2, tab3, tab4 = st.tabs(["📊 J-V Curve", "⚡ Band Diagram", "👥 Carriers", "♻️ Recombination"])
 
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=vs, y=js, mode='lines+markers', name='J-V Curve'))
-            fig.update_layout(title="J-V Characteristic", xaxis_title="Voltage (V)", yaxis_title="Current (A/cm^2)")
-            st.plotly_chart(fig, width="stretch")
+            with tab1:
+                iv = res["iv_curve"]
+                vs = [p["v"] for p in iv]
+                js = [p["j"] for p in iv]
+                fig_jv = go.Figure()
+                fig_jv.add_trace(go.Scatter(x=vs, y=js, mode='lines+markers', name='J-V Curve'))
+                fig_jv.update_layout(title="J-V Characteristic", xaxis_title="Voltage (V)", yaxis_title="Current (A/cm^2)")
+                st.plotly_chart(fig_jv, use_container_width=True)
+
+            profiles = res.get("profiles")
+            if profiles:
+                x_um = [val * 1e4 for val in profiles['x']]
+
+                with tab2:
+                    fig_bands = go.Figure()
+                    fig_bands.add_trace(go.Scatter(x=x_um, y=profiles['ec'], name='Ec', line=dict(color='black')))
+                    fig_bands.add_trace(go.Scatter(x=x_um, y=profiles['ev'], name='Ev', line=dict(color='black')))
+                    fig_bands.add_trace(go.Scatter(x=x_um, y=profiles['efn'], name='Efn', line=dict(dash='dash', color='blue')))
+                    fig_bands.add_trace(go.Scatter(x=x_um, y=profiles['efp'], name='Efp', line=dict(dash='dash', color='red')))
+                    fig_bands.update_layout(title="Band Diagram", xaxis_title="Position (µm)", yaxis_title="Energy (eV)")
+                    st.plotly_chart(fig_bands, use_container_width=True)
+
+                with tab3:
+                    fig_carriers = go.Figure()
+                    fig_carriers.add_trace(go.Scatter(x=x_um, y=profiles['n'], name='n (electrons)', yaxis='y1'))
+                    fig_carriers.add_trace(go.Scatter(x=x_um, y=profiles['p'], name='p (holes)', yaxis='y1'))
+                    fig_carriers.update_layout(
+                        title="Carrier Densities",
+                        xaxis_title="Position (µm)",
+                        yaxis=dict(title="Density (cm^-3)", type="log"),
+                    )
+                    st.plotly_chart(fig_carriers, use_container_width=True)
+
+                with tab4:
+                    fig_recomb = go.Figure()
+                    fig_recomb.add_trace(go.Scatter(x=x_um, y=profiles['r_srh'], name='SRH'))
+                    fig_recomb.add_trace(go.Scatter(x=x_um, y=profiles['r_aug'], name='Auger'))
+                    fig_recomb.add_trace(go.Scatter(x=x_um, y=profiles['r_rad'], name='Radiative'))
+                    fig_recomb.add_trace(go.Scatter(x=x_um, y=profiles['r_tot'], name='Total', line=dict(width=4)))
+                    fig_recomb.update_layout(title="Recombination Rates", xaxis_title="Position (µm)", yaxis_title="Rate (cm^-3 s^-1)", yaxis_type="log")
+                    st.plotly_chart(fig_recomb, use_container_width=True)
 
             st.download_button("Download Results (JSON)", data=json.dumps(res), file_name="results.json")
         else:

@@ -9,15 +9,18 @@ class MaterialEnricher:
     DATABASE = {
         "Si": {
             "Nc": 2.8e19, "Nv": 1.04e19, "Eg": 1.12, "affinity": 4.05,
-            "epsilon": 11.7, "mu_e": 1400, "mu_h": 450, "tau_e": 1e-6, "tau_h": 1e-6
+            "epsilon": 11.7, "mu_e": 1400, "mu_h": 450, "tau_e": 1e-6, "tau_h": 1e-6,
+            "B": 4.73e-15, "Cn": 2.8e-31, "Cp": 9.9e-32, "mass_e": 1.08, "mass_h": 0.81
         },
         "GaAs": {
             "Nc": 4.4e17, "Nv": 8.1e18, "Eg": 1.42, "affinity": 4.07,
-            "epsilon": 12.9, "mu_e": 8500, "mu_h": 400, "tau_e": 1e-8, "tau_h": 1e-8
+            "epsilon": 12.9, "mu_e": 8500, "mu_h": 400, "tau_e": 1e-8, "tau_h": 1e-8,
+            "B": 7.2e-10, "Cn": 1e-30, "Cp": 1e-30, "mass_e": 0.067, "mass_h": 0.45
         },
         "CdTe": {
             "Nc": 8e17, "Nv": 1.8e19, "Eg": 1.5, "affinity": 3.9,
-            "epsilon": 9.4, "mu_e": 320, "mu_h": 40, "tau_e": 1e-9, "tau_h": 1e-9
+            "epsilon": 9.4, "mu_e": 320, "mu_h": 40, "tau_e": 1e-9, "tau_h": 1e-9,
+            "B": 2e-10, "Cn": 1e-30, "Cp": 1e-30, "mass_e": 0.11, "mass_h": 0.4
         }
     }
 

@@ -13,6 +13,11 @@ class MaterialProperties(BaseModel):
     tau_e: float = Field(default=1e-9, description="Electron lifetime [s]")
     tau_h: float = Field(default=1e-9, description="Hole lifetime [s]")
     Et: float = Field(default=0, description="Trap energy level relative to intrinsic [eV]")
+    B: float = Field(default=0, description="Radiative recombination constant [cm^3/s]")
+    Cn: float = Field(default=0, description="Auger recombination constant (electrons) [cm^6/s]")
+    Cp: float = Field(default=0, description="Auger recombination constant (holes) [cm^6/s]")
+    mass_e: float = Field(default=1.0, description="Relative effective mass (electrons)")
+    mass_h: float = Field(default=1.0, description="Relative effective mass (holes)")
     location: Optional[str] = Field(default="", description="Spatial condition for this material (e.g. x < 1e-5)")
 
 class DopingConfig(BaseModel):

@@ -46,7 +46,8 @@ class SesameAPI:
             ypts = np.linspace(0, width, ny)
 
         self.periodic = config.get('periodic', True)
-        self.system = sesame.Builder(xpts, ypts, periodic=self.periodic)
+        self.T = config.get('T', 300.0)
+        self.system = sesame.Builder(xpts, ypts, T=self.T, periodic=self.periodic)
 
         # materials
         for mat in config.get('materials', []):
@@ -179,6 +180,54 @@ class SesameAPI:
             'current': current,
             'max_potential': np.max(self.solution['v']),
             'min_potential': np.min(self.solution['v'])
+        }
+
+    def get_profiles(self):
+        """Extract full physical profiles along the x-direction."""
+        if self.system is None or self.solution is None:
+            return None
+
+        az = Analyzer(self.system, self.solution)
+        vt = self.system.scaling.energy
+
+        # In 2D, we take a slice at y=0 or mid-width
+        if self.system.ny > 1:
+            y_idx = self.system.ny // 2
+            sites = np.arange(y_idx * self.system.nx, (y_idx + 1) * self.system.nx)
+        else:
+            sites = np.arange(self.system.nx)
+
+        x = self.system.xpts
+
+        # Band diagram
+        # Ec = -q(V + affinity) -> - (V + bl) in dimensionless energy units * vt
+        ec = -vt * (self.solution['v'][sites] + self.system.bl[sites])
+        ev = -vt * (self.solution['v'][sites] + self.system.bl[sites] + self.system.Eg[sites])
+        efn = vt * self.solution['efn'][sites]
+        efp = vt * self.solution['efp'][sites]
+
+        # Carrier densities
+        n = az.electron_density()[sites]
+        p = az.hole_density()[sites]
+
+        # Recombination rates
+        r_srh = az.bulk_srh_rr()[sites] * self.system.scaling.generation
+        r_aug = az.auger_rr()[sites] * self.system.scaling.generation
+        r_rad = az.radiative_rr()[sites] * self.system.scaling.generation
+        r_tot = az.total_rr()[sites] * self.system.scaling.generation
+
+        return {
+            'x': x.tolist(),
+            'ec': ec.tolist(),
+            'ev': ev.tolist(),
+            'efn': efn.tolist(),
+            'efp': efp.tolist(),
+            'n': n.tolist(),
+            'p': p.tolist(),
+            'r_srh': r_srh.tolist(),
+            'r_aug': r_aug.tolist(),
+            'r_rad': r_rad.tolist(),
+            'r_tot': r_tot.tolist()
         }
 
     def save(self, filename):

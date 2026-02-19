@@ -117,17 +117,21 @@ class SesameAdapter:
             return {"status": "failed", "error": "Equilibrium convergence failed"}
 
         iv_data = []
+        last_profiles = None
         for v in p.voltages:
             sol = self.api.solve_at_voltage(v, tol=p.tol, maxiter=p.maxiter, htpy=p.htpy)
             if sol:
                 m = self.api.get_metrics()
+                profiles = self.api.get_profiles()
                 iv_data.append({"v": v, "j": m['current']})
+                last_profiles = profiles
             else:
                 iv_data.append({"v": v, "j": None, "error": "Convergence failed"})
 
         return {
             "status": "success",
             "iv_curve": iv_data,
+            "profiles": last_profiles,
             "system_summary": {
                 "nx": self.api.system.nx,
                 "dimension": self.api.system.dimension
