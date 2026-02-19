@@ -1,4 +1,5 @@
 from typing import Dict, Any, Optional
+import re
 from scipy_orchestrator.core.models import MaterialProperties
 
 class MaterialEnricher:
@@ -33,24 +34,42 @@ class MaterialEnricher:
 class IntentExtractor:
     """
     Translates user natural language into structured data.
-    Uses a mock rule-based system for the sandbox, architected for LangChain.
+    Enhanced with regex to capture physical parameters like gap, thickness, etc.
     """
     def extract(self, text: str) -> Dict[str, Any]:
-        # Mocking extraction logic
-        # Real version would use: langchain.chains.create_extraction_chain
-        text = text.lower()
+        text_lower = text.lower()
         extracted = {}
 
-        if "si" in text or "silicon" in text:
+        # Material detection using word boundaries
+        if re.search(r"\bsi\b|\bsilicon\b", text_lower):
             extracted["material"] = "Si"
-        elif "gaas" in text:
+        elif re.search(r"\bgaas\b", text_lower):
             extracted["material"] = "GaAs"
-        elif "cdte" in text:
+        elif re.search(r"\bcdte\b", text_lower):
             extracted["material"] = "CdTe"
+        elif re.search(r"\bsemiconductor\b|\bmaterial\b", text_lower):
+            extracted["material"] = "Generic"
 
-        if "200nm" in text:
-            extracted["thickness"] = 200e-7 # nm to cm
-        elif "500nm" in text:
-            extracted["thickness"] = 500e-7
+        # Thickness detection (nm, um, micron, cm)
+        thickness_match = re.search(r"(\d+\.?\d*)\s*(nm|um|µm|micron|cm)", text_lower)
+        if thickness_match:
+            val = float(thickness_match.group(1))
+            unit = thickness_match.group(2)
+            if unit == "nm":
+                extracted["thickness"] = val * 1e-7
+            elif unit in ["um", "µm", "micron"]:
+                extracted["thickness"] = val * 1e-4
+            elif unit == "cm":
+                extracted["thickness"] = val
+
+        # Band gap detection (eV)
+        gap_match = re.search(r"(\d+\.?\d*)\s*ev", text_lower)
+        if gap_match:
+            extracted["Eg"] = float(gap_match.group(1))
+
+        # Doping detection (cm^-3 or cm-3)
+        doping_match = re.search(r"(\d+\.?\d*[eE]?[-+]?\d*)\s*cm", text_lower)
+        if doping_match:
+            extracted["doping_density"] = float(doping_match.group(1))
 
         return extracted

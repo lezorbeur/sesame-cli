@@ -5,6 +5,7 @@ from scipy_orchestrator.intelligence.material_cache import LocalMaterialCache
 from scipy_orchestrator.core.models import FullSimulationRequest, MaterialProperties, SystemConfig, SimulationParams, DopingConfig
 from scipy_orchestrator.adapters.sesame_adapter import SesameAdapter
 from scipy_orchestrator.core.preview_mesh import generate_mesh_preview
+from scipy_orchestrator.core.validation import identify_missing_slots
 from scipy_orchestrator.storage.database import SessionLocal, SimulationHistory, init_db
 import json
 from datetime import datetime
@@ -68,6 +69,10 @@ with st.sidebar:
                     st.session_state.material_cache.set(mat_name, mat_props)
 
             if mat_props:
+                # Override extracted parameters if they were in the prompt
+                if "Eg" in extracted:
+                    mat_props.Eg = extracted["Eg"]
+
                 st.session_state.request.system.materials = [mat_props]
                 st.info(f"Loaded properties for {mat_name} (Cached).")
 
@@ -85,11 +90,20 @@ col1, col2 = st.columns([1, 1])
 with col1:
     st.header("⚙️ Configuration")
 
-    # Slot Filling Detection
-    is_incomplete = False
+    # Advanced Slot Filling Detection
+    missing_fields = []
     if not st.session_state.request.system.materials:
-        is_incomplete = True
-        st.error("⚠️ Donnée manquante : MATÉRIAU")
+        missing_fields.append({"name": "material", "description": "At least one material is required."})
+    else:
+        # Check first material for missing sub-fields
+        mat = st.session_state.request.system.materials[0]
+        missing_mat_slots = identify_missing_slots(MaterialProperties, mat.model_dump())
+        for slot in missing_mat_slots:
+            missing_fields.append({"name": f"material.0.{slot['name']}", "description": slot['description']})
+
+    is_incomplete = len(missing_fields) > 0
+    if is_incomplete:
+        st.error(f"⚠️ Données manquantes ({len(missing_fields)}) : {', '.join([f['name'] for f in missing_fields])}")
 
     # Validation / Slot Filling Form
     with st.expander("🛠️ Slot Filling & Manual Override", expanded=is_incomplete):
@@ -103,6 +117,22 @@ with col1:
              mat_props = st.session_state.material_cache.get(new_mat) or MaterialEnricher().fetch_properties(new_mat)
              st.session_state.request.system.materials = [mat_props]
              st.rerun()
+
+        # Material Details Form
+        if st.session_state.request.system.materials:
+            st.subheader("Material Properties")
+            mat = st.session_state.request.system.materials[0]
+
+            # Use columns for properties
+            mcol1, mcol2 = st.columns(2)
+            with mcol1:
+                mat.Eg = st.number_input("Bandgap (Eg) [eV]", value=float(mat.Eg), format="%.3f")
+                mat.epsilon = st.number_input("Permittivity (eps)", value=float(mat.epsilon))
+                mat.Nc = st.number_input("Nc [cm^-3]", value=float(mat.Nc), format="%.2e")
+            with mcol2:
+                mat.mu_e = st.number_input("mu_e [cm^2/V/s]", value=float(mat.mu_e))
+                mat.mu_h = st.number_input("mu_h [cm^2/V/s]", value=float(mat.mu_h))
+                mat.Nv = st.number_input("Nv [cm^-3]", value=float(mat.Nv), format="%.2e")
 
         # Doping Form
         st.subheader("Doping")
@@ -159,7 +189,7 @@ with col2:
 
     st.json(st.session_state.request.model_dump())
 
-    if st.button("Run Simulation", type="primary"):
+    if st.button("Run Simulation", type="primary", disabled=is_incomplete):
         with st.spinner("Executing simulation..."):
             # Persistence
             db = SessionLocal()
